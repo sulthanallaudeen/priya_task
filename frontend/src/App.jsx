@@ -10,6 +10,7 @@ import {
   updateTask,
   deleteTask,
   getUsers,
+  getUserTasks,
   updateUser,
   createStatus,
   updateStatus,
@@ -175,10 +176,24 @@ export default function App() {
 
   const [newStatusName, setNewStatusName] = useState("");
   const [statusDrafts, setStatusDrafts] = useState({});
+  const [adminMenu, setAdminMenu] = useState("dashboard");
+  const [selectedUserForTasks, setSelectedUserForTasks] = useState(null);
+  const [selectedUserTaskPage, setSelectedUserTaskPage] = useState(1);
+  const [selectedUserTaskData, setSelectedUserTaskData] = useState({
+    tasks: [],
+    total: 0,
+    page: 1,
+    limit: TASK_PAGE_SIZE
+  });
+  const [selectedUserTaskLoading, setSelectedUserTaskLoading] = useState(false);
 
   const isAdmin = user?.role === "admin";
   const taskTotalPages = pageCount(taskData.total, taskData.limit || TASK_PAGE_SIZE);
   const userTotalPages = pageCount(userData.total, userData.limit || USER_PAGE_SIZE);
+  const selectedUserTaskTotalPages = pageCount(
+    selectedUserTaskData.total,
+    selectedUserTaskData.limit || TASK_PAGE_SIZE
+  );
   const assignableUsers = useMemo(() => {
     if (!user) {
       return [];
@@ -297,6 +312,24 @@ export default function App() {
     }
   }
 
+  async function loadTasksForSelectedUser(userId, page = selectedUserTaskPage) {
+    if (!token || !isAdmin || !userId) {
+      return;
+    }
+    setSelectedUserTaskLoading(true);
+    try {
+      const result = await getUserTasks(token, userId, {
+        page,
+        limit: TASK_PAGE_SIZE
+      });
+      setSelectedUserTaskData(result);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSelectedUserTaskLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!token || !user || route !== "/dashboard") {
       return;
@@ -319,6 +352,13 @@ export default function App() {
     }
     loadUsers();
   }, [token, isAdmin, route, userFilters, userPage]);
+
+  useEffect(() => {
+    if (!token || !isAdmin || route !== "/dashboard" || !selectedUserForTasks?.id) {
+      return;
+    }
+    loadTasksForSelectedUser(selectedUserForTasks.id, selectedUserTaskPage);
+  }, [token, isAdmin, route, selectedUserForTasks, selectedUserTaskPage]);
 
   const stats = useMemo(() => {
     const list = taskData.tasks || [];
@@ -351,6 +391,7 @@ export default function App() {
     localStorage.setItem(TOKEN_KEY, data.token);
     setToken(data.token);
     setUser(data.user);
+    setAdminMenu("dashboard");
     setNotice("Login successful.");
     setError("");
     setRoute("/dashboard");
@@ -404,6 +445,10 @@ export default function App() {
       setTaskData({ tasks: [], total: 0, page: 1, limit: TASK_PAGE_SIZE });
       setUserData({ users: [], total: 0, page: 1, limit: USER_PAGE_SIZE });
       setStatuses([]);
+      setAdminMenu("dashboard");
+      setSelectedUserForTasks(null);
+      setSelectedUserTaskPage(1);
+      setSelectedUserTaskData({ tasks: [], total: 0, page: 1, limit: TASK_PAGE_SIZE });
       setRoute("/login");
     }
   }
@@ -461,6 +506,9 @@ export default function App() {
       await loadTasks();
       if (isAdmin) {
         await loadUsers();
+        if (selectedUserForTasks?.id) {
+          await loadTasksForSelectedUser(selectedUserForTasks.id, selectedUserTaskPage);
+        }
       }
     } catch (requestError) {
       setError(requestError.message);
@@ -482,6 +530,9 @@ export default function App() {
       await loadTasks();
       if (isAdmin) {
         await loadUsers();
+        if (selectedUserForTasks?.id) {
+          await loadTasksForSelectedUser(selectedUserForTasks.id, selectedUserTaskPage);
+        }
       }
     } catch (requestError) {
       setError(requestError.message);
@@ -496,9 +547,17 @@ export default function App() {
       setNotice("User updated.");
       await loadUsers();
       await loadTasks();
+      if (selectedUserForTasks?.id) {
+        await loadTasksForSelectedUser(selectedUserForTasks.id, selectedUserTaskPage);
+      }
     } catch (requestError) {
       setError(requestError.message);
     }
+  }
+
+  function handleSelectUserTasks(userItem) {
+    setSelectedUserTaskPage(1);
+    setSelectedUserForTasks(userItem);
   }
 
   async function handleCreateStatus(event) {
@@ -687,216 +746,147 @@ export default function App() {
 
         {route === "/dashboard" && user ? (
           <section className="dashboard">
-            <div className="stats-grid">
-              <article>
-                <span>{stats.total}</span>
-                <p>Total Tasks</p>
-              </article>
-              <article>
-                <span>{stats.toDo}</span>
-                <p>To Do (Current Page)</p>
-              </article>
-              <article>
-                <span>{stats.inProgress}</span>
-                <p>In Progress (Current Page)</p>
-              </article>
-              <article>
-                <span>{stats.completed}</span>
-                <p>Completed (Current Page)</p>
-              </article>
-              <article>
-                <span>{stats.blocked}</span>
-                <p>Blocked (Current Page)</p>
-              </article>
-            </div>
-
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Task List</h2>
-                <button className="btn primary" onClick={openCreateTaskModal} type="button">
-                  Create Task
-                </button>
-              </div>
-
-              <div className="filters">
-                <input
-                  placeholder="Search tasks"
-                  value={taskFilters.q}
-                  onChange={(event) => {
-                    setTaskPage(1);
-                    setTaskFilters((prev) => ({ ...prev, q: event.target.value }));
-                  }}
-                />
-                <select
-                  value={taskFilters.statusId}
-                  onChange={(event) => {
-                    setTaskPage(1);
-                    setTaskFilters((prev) => ({ ...prev, statusId: event.target.value }));
-                  }}
-                >
-                  <option value="all">All statuses</option>
-                  {statuses.map((status) => (
-                    <option key={status.id} value={status.id}>
-                      {status.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={taskFilters.priority}
-                  onChange={(event) => {
-                    setTaskPage(1);
-                    setTaskFilters((prev) => ({ ...prev, priority: event.target.value }));
-                  }}
-                >
-                  <option value="all">All priorities</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-                <select
-                  value={`${taskFilters.sortBy}:${taskFilters.order}`}
-                  onChange={(event) => {
-                    const [sortBy, order] = event.target.value.split(":");
-                    setTaskPage(1);
-                    setTaskFilters((prev) => ({ ...prev, sortBy, order }));
-                  }}
-                >
-                  <option value="createdAt:DESC">Newest first</option>
-                  <option value="createdAt:ASC">Oldest first</option>
-                  <option value="dueDate:ASC">Due date first</option>
-                  <option value="priority:DESC">Priority</option>
-                  <option value="title:ASC">Title A-Z</option>
-                </select>
-                {isAdmin ? (
-                  <select
-                    value={taskFilters.assignedToUserId}
-                    onChange={(event) => {
-                      setTaskPage(1);
-                      setTaskFilters((prev) => ({
-                        ...prev,
-                        assignedToUserId: event.target.value
-                      }));
-                    }}
-                  >
-                    <option value="all">All assignees</option>
-                    {userData.users.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.fullName}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-              </div>
-
-              {taskLoading ? <p className="muted">Loading tasks...</p> : null}
-              {!taskLoading && taskData.tasks.length === 0 ? (
-                <p className="muted">No tasks found.</p>
-              ) : null}
-              <div className="task-list">
-                {taskData.tasks.map((task) => (
-                  <article className="task-card" key={task.id}>
-                    <div className="task-title">
-                      <h3>{task.title}</h3>
-                      <span className={`pill priority-${task.priority}`}>{task.priority}</span>
-                    </div>
-                    <p className="muted">{task.description || "No description"}</p>
-                    <div className="task-meta">
-                      <span>Status: {task.statusName}</span>
-                      <span>Due: {formatDateLabel(task.dueDate)}</span>
-                      <span>Assigned: {task.assignedToUserName}</span>
-                    </div>
-                    <div className="task-actions">
-                      <button className="btn ghost" onClick={() => openEditTaskModal(task)} type="button">
-                        Edit
-                      </button>
-                      <button
-                        className="btn danger"
-                        onClick={() => setDeleteTaskState({ open: true, task })}
-                        type="button"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <div className="pagination">
-                <button
-                  className="btn ghost"
-                  onClick={() => setTaskPage((prev) => Math.max(1, prev - 1))}
-                  disabled={taskPage <= 1}
-                  type="button"
-                >
-                  Previous
-                </button>
-                <p>
-                  Page {taskPage} / {taskTotalPages}
-                </p>
-                <button
-                  className="btn ghost"
-                  onClick={() => setTaskPage((prev) => Math.min(taskTotalPages, prev + 1))}
-                  disabled={taskPage >= taskTotalPages}
-                  type="button"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-
             {isAdmin ? (
-              <div className="admin-grid">
-                <section className="panel">
+              <div className="menu-tabs">
+                <button
+                  className={`btn ${adminMenu === "dashboard" ? "primary" : "ghost"}`}
+                  onClick={() => setAdminMenu("dashboard")}
+                  type="button"
+                >
+                  Dashboard
+                </button>
+                <button
+                  className={`btn ${adminMenu === "users" ? "primary" : "ghost"}`}
+                  onClick={() => setAdminMenu("users")}
+                  type="button"
+                >
+                  Manage Users
+                </button>
+                <button
+                  className={`btn ${adminMenu === "statuses" ? "primary" : "ghost"}`}
+                  onClick={() => setAdminMenu("statuses")}
+                  type="button"
+                >
+                  Manage Task Status
+                </button>
+              </div>
+            ) : null}
+
+            {!isAdmin || adminMenu === "dashboard" ? (
+              <>
+                <div className="stats-grid">
+                  <article>
+                    <span>{stats.total}</span>
+                    <p>Total Tasks</p>
+                  </article>
+                  <article>
+                    <span>{stats.toDo}</span>
+                    <p>To Do (Current Page)</p>
+                  </article>
+                  <article>
+                    <span>{stats.inProgress}</span>
+                    <p>In Progress (Current Page)</p>
+                  </article>
+                  <article>
+                    <span>{stats.completed}</span>
+                    <p>Completed (Current Page)</p>
+                  </article>
+                  <article>
+                    <span>{stats.blocked}</span>
+                    <p>Blocked (Current Page)</p>
+                  </article>
+                </div>
+
+                <div className="panel">
                   <div className="panel-head">
-                    <h2>Users</h2>
+                    <h2>Task List</h2>
+                    <button className="btn primary" onClick={openCreateTaskModal} type="button">
+                      Create Task
+                    </button>
+                  </div>
+
+                  <div className="filters">
                     <input
-                      placeholder="Search users"
-                      value={userFilters.q}
+                      placeholder="Search tasks"
+                      value={taskFilters.q}
                       onChange={(event) => {
-                        setUserPage(1);
-                        setUserFilters({ q: event.target.value });
+                        setTaskPage(1);
+                        setTaskFilters((prev) => ({ ...prev, q: event.target.value }));
                       }}
                     />
+                    <select
+                      value={taskFilters.statusId}
+                      onChange={(event) => {
+                        setTaskPage(1);
+                        setTaskFilters((prev) => ({ ...prev, statusId: event.target.value }));
+                      }}
+                    >
+                      <option value="all">All statuses</option>
+                      {statuses.map((status) => (
+                        <option key={status.id} value={status.id}>
+                          {status.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={taskFilters.priority}
+                      onChange={(event) => {
+                        setTaskPage(1);
+                        setTaskFilters((prev) => ({ ...prev, priority: event.target.value }));
+                      }}
+                    >
+                      <option value="all">All priorities</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                    <select
+                      value={`${taskFilters.sortBy}:${taskFilters.order}`}
+                      onChange={(event) => {
+                        const [sortBy, order] = event.target.value.split(":");
+                        setTaskPage(1);
+                        setTaskFilters((prev) => ({ ...prev, sortBy, order }));
+                      }}
+                    >
+                      <option value="createdAt:DESC">Newest first</option>
+                      <option value="createdAt:ASC">Oldest first</option>
+                      <option value="dueDate:ASC">Due date first</option>
+                      <option value="priority:DESC">Priority</option>
+                      <option value="title:ASC">Title A-Z</option>
+                    </select>
                   </div>
-                  {userLoading ? <p className="muted">Loading users...</p> : null}
-                  <div className="user-list">
-                    {userData.users.map((item) => (
-                      <article className="user-row" key={item.id}>
-                        <div>
-                          <h3>{item.fullName}</h3>
-                          <p className="muted">{item.email}</p>
-                          <p className="muted">Tasks: {item.taskCount || 0}</p>
+
+                  {taskLoading ? <p className="muted">Loading tasks...</p> : null}
+                  {!taskLoading && taskData.tasks.length === 0 ? (
+                    <p className="muted">No tasks found.</p>
+                  ) : null}
+                  <div className="task-list">
+                    {taskData.tasks.map((task) => (
+                      <article className="task-card" key={task.id}>
+                        <div className="task-title">
+                          <h3>{task.title}</h3>
+                          <span className={`pill priority-${task.priority}`}>{task.priority}</span>
                         </div>
-                        <div className="user-actions">
-                          <select
-                            value={item.role}
-                            onChange={(event) =>
-                              handleUserUpdate(item.id, { role: event.target.value })
-                            }
-                          >
-                            <option value="user">user</option>
-                            <option value="admin">admin</option>
-                          </select>
+                        <p className="muted">{task.description || "No description"}</p>
+                        <div className="task-meta">
+                          <span>Status: {task.statusName}</span>
+                          <span>Due: {formatDateLabel(task.dueDate)}</span>
+                          <span>Assigned: {task.assignedToUserName}</span>
+                        </div>
+                        <div className="task-actions">
                           <button
                             className="btn ghost"
+                            onClick={() => openEditTaskModal(task)}
                             type="button"
-                            onClick={() =>
-                              handleUserUpdate(item.id, { isActive: !item.isActive })
-                            }
                           >
-                            {item.isActive ? "Deactivate" : "Activate"}
+                            Edit
                           </button>
                           <button
-                            className="btn ghost"
+                            className="btn danger"
+                            onClick={() => setDeleteTaskState({ open: true, task })}
                             type="button"
-                            onClick={() => {
-                              setTaskPage(1);
-                              setTaskFilters((prev) => ({
-                                ...prev,
-                                assignedToUserId: String(item.id)
-                              }));
-                            }}
                           >
-                            View Tasks
+                            Delete
                           </button>
                         </div>
                       </article>
@@ -905,72 +895,212 @@ export default function App() {
                   <div className="pagination">
                     <button
                       className="btn ghost"
-                      onClick={() => setUserPage((prev) => Math.max(1, prev - 1))}
-                      disabled={userPage <= 1}
+                      onClick={() => setTaskPage((prev) => Math.max(1, prev - 1))}
+                      disabled={taskPage <= 1}
                       type="button"
                     >
                       Previous
                     </button>
                     <p>
-                      Page {userPage} / {userTotalPages}
+                      Page {taskPage} / {taskTotalPages}
                     </p>
                     <button
                       className="btn ghost"
-                      onClick={() => setUserPage((prev) => Math.min(userTotalPages, prev + 1))}
-                      disabled={userPage >= userTotalPages}
+                      onClick={() => setTaskPage((prev) => Math.min(taskTotalPages, prev + 1))}
+                      disabled={taskPage >= taskTotalPages}
                       type="button"
                     >
                       Next
                     </button>
                   </div>
-                </section>
+                </div>
+              </>
+            ) : null}
 
-                <section className="panel">
-                  <h2>Task Status Management</h2>
-                  <form className="status-create" onSubmit={handleCreateStatus}>
-                    <input
-                      placeholder="New status name"
-                      value={newStatusName}
-                      onChange={(event) => setNewStatusName(event.target.value)}
-                      maxLength={40}
-                      required
-                    />
-                    <button className="btn primary" type="submit">
-                      Add Status
-                    </button>
-                  </form>
-                  <div className="status-list">
-                    {statuses.map((status) => (
-                      <article className="status-row" key={status.id}>
-                        <input
-                          value={statusDrafts[status.id] || ""}
-                          onChange={(event) =>
-                            setStatusDrafts((prev) => ({
-                              ...prev,
-                              [status.id]: event.target.value
-                            }))
-                          }
-                          maxLength={40}
-                        />
+            {isAdmin && (adminMenu === "dashboard" || adminMenu === "users") ? (
+              <section className="panel">
+                <div className="panel-head">
+                  <h2>User List</h2>
+                  <input
+                    placeholder="Search users"
+                    value={userFilters.q}
+                    onChange={(event) => {
+                      setUserPage(1);
+                      setUserFilters({ q: event.target.value });
+                    }}
+                  />
+                </div>
+                {userLoading ? <p className="muted">Loading users...</p> : null}
+                <div className="user-list">
+                  {userData.users.map((item) => (
+                    <article className="user-row" key={item.id}>
+                      <div>
+                        <h3>{item.fullName}</h3>
+                        <p className="muted">{item.email}</p>
+                        <p className="muted">Tasks: {item.taskCount || 0}</p>
+                      </div>
+                      <div className="user-actions">
                         <button
                           className="btn ghost"
-                          onClick={() => handleUpdateStatus(status.id)}
                           type="button"
+                          onClick={() => handleSelectUserTasks(item)}
                         >
-                          Save
+                          View Tasks
                         </button>
-                        <button
-                          className="btn danger"
-                          onClick={() => handleDeleteStatus(status.id)}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              </div>
+                        {adminMenu === "users" ? (
+                          <>
+                            <select
+                              value={item.role}
+                              onChange={(event) =>
+                                handleUserUpdate(item.id, { role: event.target.value })
+                              }
+                            >
+                              <option value="user">user</option>
+                              <option value="admin">admin</option>
+                            </select>
+                            <button
+                              className="btn ghost"
+                              type="button"
+                              onClick={() =>
+                                handleUserUpdate(item.id, { isActive: !item.isActive })
+                              }
+                            >
+                              {item.isActive ? "Deactivate" : "Activate"}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <div className="pagination">
+                  <button
+                    className="btn ghost"
+                    onClick={() => setUserPage((prev) => Math.max(1, prev - 1))}
+                    disabled={userPage <= 1}
+                    type="button"
+                  >
+                    Previous
+                  </button>
+                  <p>
+                    Page {userPage} / {userTotalPages}
+                  </p>
+                  <button
+                    className="btn ghost"
+                    onClick={() => setUserPage((prev) => Math.min(userTotalPages, prev + 1))}
+                    disabled={userPage >= userTotalPages}
+                    type="button"
+                  >
+                    Next
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {isAdmin && selectedUserForTasks && adminMenu !== "statuses" ? (
+              <section className="panel">
+                <div className="panel-head">
+                  <h2>{selectedUserForTasks.fullName} - Task List</h2>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => setSelectedUserForTasks(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+                {selectedUserTaskLoading ? <p className="muted">Loading user tasks...</p> : null}
+                {!selectedUserTaskLoading && selectedUserTaskData.tasks.length === 0 ? (
+                  <p className="muted">No tasks found for this user.</p>
+                ) : null}
+                <div className="task-list">
+                  {selectedUserTaskData.tasks.map((task) => (
+                    <article className="task-card" key={`user-task-${task.id}`}>
+                      <div className="task-title">
+                        <h3>{task.title}</h3>
+                        <span className={`pill priority-${task.priority}`}>{task.priority}</span>
+                      </div>
+                      <div className="task-meta">
+                        <span>Status: {task.statusName}</span>
+                        <span>Due: {formatDateLabel(task.dueDate)}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <div className="pagination">
+                  <button
+                    className="btn ghost"
+                    onClick={() => setSelectedUserTaskPage((prev) => Math.max(1, prev - 1))}
+                    disabled={selectedUserTaskPage <= 1}
+                    type="button"
+                  >
+                    Previous
+                  </button>
+                  <p>
+                    Page {selectedUserTaskPage} / {selectedUserTaskTotalPages}
+                  </p>
+                  <button
+                    className="btn ghost"
+                    onClick={() =>
+                      setSelectedUserTaskPage((prev) =>
+                        Math.min(selectedUserTaskTotalPages, prev + 1)
+                      )
+                    }
+                    disabled={selectedUserTaskPage >= selectedUserTaskTotalPages}
+                    type="button"
+                  >
+                    Next
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {isAdmin && adminMenu === "statuses" ? (
+              <section className="panel">
+                <h2>Manage Task Status</h2>
+                <form className="status-create" onSubmit={handleCreateStatus}>
+                  <input
+                    placeholder="New status name"
+                    value={newStatusName}
+                    onChange={(event) => setNewStatusName(event.target.value)}
+                    maxLength={40}
+                    required
+                  />
+                  <button className="btn primary" type="submit">
+                    Add Status
+                  </button>
+                </form>
+                <div className="status-list">
+                  {statuses.map((status) => (
+                    <article className="status-row" key={status.id}>
+                      <input
+                        value={statusDrafts[status.id] || ""}
+                        onChange={(event) =>
+                          setStatusDrafts((prev) => ({
+                            ...prev,
+                            [status.id]: event.target.value
+                          }))
+                        }
+                        maxLength={40}
+                      />
+                      <button
+                        className="btn ghost"
+                        onClick={() => handleUpdateStatus(status.id)}
+                        type="button"
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="btn danger"
+                        onClick={() => handleDeleteStatus(status.id)}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </section>
             ) : null}
           </section>
         ) : null}

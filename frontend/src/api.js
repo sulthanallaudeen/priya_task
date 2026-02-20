@@ -133,3 +133,14 @@ export async function updateUser(token, userId, payload) {
   });
   return data.user;
 }
+
+export async function getUserTasks(token, userId, params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "" && value !== "all") {
+      query.set(key, String(value));
+    }
+  });
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request(`/users/${userId}/tasks${suffix}`, { token });
+}
