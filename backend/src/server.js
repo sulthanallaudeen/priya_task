@@ -35,6 +35,14 @@ app.use(
 );
 app.use(express.json());
 
+app.get("/api/test", (req, res) => {
+  return res.json({
+    status: "ok",
+    appName: "Priya Task Manager API",
+    message: "Backend is running"
+  });
+});
+
 app.get("/api/health", async (req, res) => {
   try {
     await verifyDatabaseConnection();
