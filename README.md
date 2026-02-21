@@ -213,19 +213,22 @@ Notes:
 - After backend deploy, set backend `FRONTEND_ORIGIN` to your Netlify site URL.
 
 ### 6) Deploy Backend for Production
-You can deploy backend using Docker on Render (blueprint file included: `render.yaml`).
+You can deploy backend on Render without Docker (blueprint file included: `render.yaml`).
 
 Recommended deployment flow:
-1. Provision a managed MySQL database (Railway MySQL, PlanetScale, Aiven, etc.).
+1. Use your MySQL database (`sql12.freesqldatabase.com`, DB `sql12817655`).
 2. Import schema:
    - Run `database/schema.sql` against your production DB.
 3. Deploy backend service from this repo using Render:
-   - Render reads `render.yaml` and `backend/Dockerfile`.
+   - Render reads `render.yaml` and creates a Node web service from `backend/`.
 4. Set backend environment variables:
    - `FRONTEND_ORIGIN=https://your-site.netlify.app`
-   - `DATABASE_URL=mysql://...`
-   - `DB_SSL=true` (if provider requires TLS)
-   - `DB_SSL_REJECT_UNAUTHORIZED=false` (set according to provider docs)
+   - `DB_HOST=sql12.freesqldatabase.com`
+   - `DB_PORT=3306`
+   - `DB_NAME=sql12817655`
+   - `DB_USER=sql12817655`
+   - `DB_PASSWORD=testing`
+   - `DB_SSL=false`
    - `ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD` (strong secret)
 5. Verify backend:
    - `https://your-backend-domain/api/health`
@@ -234,8 +237,6 @@ Recommended deployment flow:
 7. Redeploy Netlify frontend.
 
 Files added for production backend deploy:
-- `backend/Dockerfile`
-- `backend/.dockerignore`
 - `backend/.env.production.example`
 - `render.yaml`
 
