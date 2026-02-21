@@ -49,7 +49,7 @@ It supports user registration/login, role-based dashboards, task lifecycle manag
 - Custom CSS (responsive, modal-first dashboard UX)
 
 ### Database
-- MySQL 8+
+- MySQL-compatible server (FreeSQLDatabase supported)
 - PostgreSQL script provided for pgAdmin import reference (`database/schema_postgres.sql`)
 
 ## Project Structure
@@ -134,8 +134,9 @@ Schema file: `database/schema.sql`
 ## API Endpoints
 Base URL: `http://localhost:5000/api`
 
-### Health
-- `GET /health`
+### System
+- `GET /test` (checks API process is running; no DB dependency)
+- `GET /health` (checks API + database connectivity)
 
 ### Auth
 - `POST /auth/register`
@@ -166,13 +167,22 @@ Base URL: `http://localhost:5000/api`
 ### 1) Prerequisites
 - Node.js 18+
 - npm 9+
-- MySQL 8+
+- MySQL-compatible server
 
 ### 2) Database Setup (MySQL)
 From project root:
 ```bash
 mysql -u root -p < database/schema.sql
 ```
+
+If you are using FreeSQLDatabase credentials directly, you can run:
+```bash
+mysql -h sql12.freesqldatabase.com -P 3306 -u sql12817655 -p sql12817655 < database/schema.sql
+```
+
+Note:
+- `database/schema.sql` already targets `sql12817655`.
+- If your DB user cannot run `CREATE DATABASE`, remove the first two lines from the schema and rerun import.
 
 ### 3) Backend Setup
 ```bash
@@ -204,7 +214,7 @@ Steps:
 1. Push this repo to GitHub/GitLab/Bitbucket.
 2. In Netlify, create a new site from your repo.
 3. In Netlify Site Settings -> Environment Variables, set:
-   - `VITE_API_BASE_URL=https://your-backend-domain.com/api`
+   - `VITE_API_BASE_URL=https://priya-task-1.onrender.com/api`
 4. Deploy.
 
 Notes:
@@ -222,7 +232,7 @@ Recommended deployment flow:
 3. Deploy backend service from this repo using Render:
    - Render reads `render.yaml` and creates a Node web service from `backend/`.
 4. Set backend environment variables:
-   - `FRONTEND_ORIGIN=https://your-site.netlify.app`
+   - `FRONTEND_ORIGIN=https://priyataskmanager.netlify.app`
    - `DB_HOST=sql12.freesqldatabase.com`
    - `DB_PORT=3306`
    - `DB_NAME=sql12817655`
@@ -231,9 +241,10 @@ Recommended deployment flow:
    - `DB_SSL=false`
    - `ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD` (strong secret)
 5. Verify backend:
-   - `https://your-backend-domain/api/health`
+   - `https://priya-task-1.onrender.com/api/test`
+   - `https://priya-task-1.onrender.com/api/health`
 6. Update Netlify env:
-   - `VITE_API_BASE_URL=https://your-backend-domain/api`
+   - `VITE_API_BASE_URL=https://priya-task-1.onrender.com/api`
 7. Redeploy Netlify frontend.
 
 Files added for production backend deploy:
@@ -276,3 +287,4 @@ You can also register new user accounts from the UI.
 - Minimum one active admin is enforced during role/active updates.
 - Backend runtime targets MySQL; PostgreSQL schema file is provided only for pgAdmin convenience/import workflows.
 - Backend supports either discrete DB vars (`DB_HOST`, `DB_USER`, ...) or single `DATABASE_URL`.
+- Schema keeps `updated_at` nullable for compatibility with older MySQL variants that reject multiple auto-managed `TIMESTAMP` columns.
