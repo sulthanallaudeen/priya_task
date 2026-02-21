@@ -28,7 +28,7 @@ const poolConfig = process.env.DATABASE_URL
       port: Number(process.env.DB_PORT || 3306),
       user: process.env.DB_USER || "root",
       password: process.env.DB_PASSWORD || "",
-      database: process.env.DB_NAME || "task_manager",
+      database: process.env.DB_NAME || "sql12817655",
       ...(sslConfig ? { ssl: sslConfig } : {})
     };
 
